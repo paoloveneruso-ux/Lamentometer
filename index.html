@@ -594,7 +594,7 @@ function renderPlayerSelect(){
       </div>
       <div class="field" style="margin-top:14px">
         <label>La tua foto (opzionale)</label>
-        <input type="file" accept="image/*" capture="user" onchange="handlePhotoInput(this,'photoPreview')">
+        <input type="file" accept="image/*" onchange="handlePhotoInput(this,'photoPreview')">
         <div id="photoPreview" style="margin-top:8px"></div>
       </div>
       <button class="btn" style="margin-top:10px" onclick="actionAddPlayer()">Sono nuovo, aggiungimi</button>
@@ -782,7 +782,7 @@ function renderTabImpostazioni(){
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
         ${avatarHtml(myPhoto, state.playerName, 48)}
         <div style="flex:1">
-          <input type="file" accept="image/*" capture="user" onchange="handlePhotoInput(this,'myPhotoPreview')">
+          <input type="file" accept="image/*" onchange="handlePhotoInput(this,'myPhotoPreview')">
           <div id="myPhotoPreview"></div>
         </div>
       </div>
