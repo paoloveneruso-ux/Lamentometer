@@ -288,6 +288,45 @@ function parseFirebaseConfig(text){
 }
 function save(key,val){ localStorage.setItem(key, typeof val==='string'?val:JSON.stringify(val)); }
 function load(key){ const v=localStorage.getItem(key); if(v===null) return null; try{return JSON.parse(v);}catch(e){return v;} }
+function getDeviceId(){
+  let id=load('lam_device_id');
+  if(!id){ id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36); save('lam_device_id', id); }
+  return id;
+}
+function isCreator(){
+  return !!(state.tripData && state.tripData.meta && state.tripData.meta.creatorDevice === getDeviceId());
+}
+function avatarHtml(photo,name,size){
+  size=size||40;
+  if(photo){
+    return `<img src="${photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex-shrink:0">`;
+  }
+  const initial=(name||'?').trim().charAt(0).toUpperCase();
+  return `<div style="width:${size}px;height:${size}px;min-width:${size}px;border-radius:50%;background:var(--paper-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink-soft);font-size:${Math.round(size*0.4)}px;flex-shrink:0">${esc(initial)}</div>`;
+}
+function handlePhotoInput(inputEl, previewId){
+  const file=inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const size=220;
+      const canvas=document.createElement('canvas');
+      canvas.width=size; canvas.height=size;
+      const ctx=canvas.getContext('2d');
+      const scale=Math.max(size/img.width, size/img.height);
+      const w=img.width*scale, h=img.height*scale;
+      ctx.drawImage(img,(size-w)/2,(size-h)/2,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.72);
+      state.pendingPhoto=dataUrl;
+      const prev=document.getElementById(previewId);
+      if(prev) prev.innerHTML=avatarHtml(dataUrl,'',72);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 /* ============ INIT ============ */
 const BUILTIN_FIREBASE_CONFIG = {
@@ -383,7 +422,7 @@ function actionCreateTrip(){
   if(!name){ state.error="Dai un nome al viaggio."; render(); return; }
   const id=genCode();
   const pegniObj={}; DEFAULT_PEGNI.forEach(p=>{ pegniObj[db.ref().push().key]=p; });
-  db.ref('trips/'+id+'/meta').set({name, createdAt:Date.now(), pegniPool:pegniObj}).then(()=>{
+  db.ref('trips/'+id+'/meta').set({name, createdAt:Date.now(), creatorDevice:getDeviceId(), pegniPool:pegniObj}).then(()=>{
     state.trips.push({id,name}); save('lam_trips', state.trips);
     state.error=null;
     attachTrip(id);
@@ -415,7 +454,15 @@ function actionAddPlayer(){
   const name=document.getElementById('newPlayerName').value.trim();
   if(!name){ return; }
   const ref=db.ref('trips/'+state.activeTripId+'/players').push();
-  ref.set({name}).then(()=>{ actionSelectPlayer(ref.key, name); });
+  const photo=state.pendingPhoto || null;
+  ref.set({name, photo}).then(()=>{ state.pendingPhoto=null; actionSelectPlayer(ref.key, name); });
+}
+
+function actionChangeMyPhoto(){
+  if(!state.pendingPhoto) return;
+  db.ref(`trips/${state.activeTripId}/players/${state.playerId}/photo`).set(state.pendingPhoto).then(()=>{
+    state.pendingPhoto=null; render();
+  });
 }
 
 function actionSwitchPlayer(){
@@ -450,6 +497,7 @@ function actionAssignPegno(){
 
 function actionAddPegno(){
   const input=document.getElementById('newPegnoInput');
+  if(!isCreator()) return;
   const val=input.value.trim();
   if(!val) return;
   db.ref(`trips/${state.activeTripId}/meta/pegniPool`).push(val);
@@ -457,6 +505,7 @@ function actionAddPegno(){
 }
 
 function actionRemovePegno(key){
+  if(!isCreator()) return;
   db.ref(`trips/${state.activeTripId}/meta/pegniPool/${key}`).remove();
 }
 
@@ -531,7 +580,7 @@ function renderTripSelect(){
 function renderPlayerSelect(){
   const players=(state.tripData && state.tripData.players) || {};
   const keys=Object.keys(players);
-  const list=keys.map(id=>`<button class="player-btn" onclick="actionSelectPlayer('${id}','${esc(players[id].name).replace(/'/g,"\\'")}')">Sono io: ${esc(players[id].name)}</button>`).join('');
+  const list=keys.map(id=>`<button class="player-btn" style="display:flex;align-items:center;gap:12px" onclick="actionSelectPlayer('${id}','${esc(players[id].name).replace(/'/g,"\\'")}')">${avatarHtml(players[id].photo, players[id].name, 40)}<span>Sono io: ${esc(players[id].name)}</span></button>`).join('');
   return `
   <div class="topbar"><div class="brand">Lamentometro</div><div class="trip-name">${esc(state.tripData.meta.name)}</div></div>
   <div class="screen">
@@ -542,6 +591,11 @@ function renderPlayerSelect(){
       <label>Aggiungi il tuo nome</label>
       <div class="row" style="margin-top:8px">
         <input id="newPlayerName" placeholder="Il tuo nome">
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>La tua foto (opzionale)</label>
+        <input type="file" accept="image/*" capture="user" onchange="handlePhotoInput(this,'photoPreview')">
+        <div id="photoPreview" style="margin-top:8px"></div>
       </div>
       <button class="btn" style="margin-top:10px" onclick="actionAddPlayer()">Sono nuovo, aggiungimi</button>
     </div>
@@ -584,10 +638,12 @@ function renderMain(){
 function renderTabOggi(){
   const t=todayStr();
   const myCount=(state.tripData.days && state.tripData.days[t] && state.tripData.days[t][state.playerId])||0;
+  const myPhoto = state.tripData.players && state.tripData.players[state.playerId] ? state.tripData.players[state.playerId].photo : null;
   return `
     <div class="today-date">${prettyDate(t)}</div>
     <div class="tap-wrap">
-      <div class="mono muted" style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em">${esc(state.playerName)}</div>
+      ${avatarHtml(myPhoto, state.playerName, 56)}
+      <div class="mono muted" style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin-top:8px">${esc(state.playerName)}</div>
       <div class="tap-count">${myCount}</div>
       <div class="muted" style="margin-bottom:16px">lamentele registrate oggi</div>
       <button class="tap-btn" onclick="actionAddComplaint()">+1<br>lamentela</button>
@@ -597,13 +653,14 @@ function renderTabOggi(){
 }
 
 function chartHtml(entries, maxVal){
-  return entries.map(([name,count],i)=>{
+  return entries.map(({name,count,photo},i)=>{
     const pct = maxVal>0 ? Math.max(count/maxVal*100, count>0?14:4) : 4;
     const cls = count===0 ? 'zero' : (count===maxVal && maxVal>0 ? 'top' : 'mid');
     const badge = i===0 && maxVal>0 ? `<div class="rank-badge gold">TOP</div>` : `<div class="rank-badge">#${i+1}</div>`;
     return `<div class="chart-item">
       ${badge}
-      <div class="therm-track"><div class="therm-fill ${cls}" style="height:${pct}%"></div></div>
+      ${avatarHtml(photo,name,32)}
+      <div class="therm-track" style="margin-top:6px"><div class="therm-fill ${cls}" style="height:${pct}%"></div></div>
       <div class="chart-count">${count}</div>
       <div class="chart-name">${esc(name)}</div>
     </div>`;
@@ -614,14 +671,18 @@ function renderTabGiorno(){
   const t=todayStr();
   const players=state.tripData.players||{};
   const days=(state.tripData.days && state.tripData.days[t])||{};
-  const entries=Object.keys(players).map(id=>[players[id].name, days[id]||0]).sort((a,b)=>b[1]-a[1]);
-  const maxVal=entries.length?entries[0][1]:0;
+  const entries=Object.keys(players).map(id=>({name:players[id].name, count:days[id]||0, photo:players[id].photo})).sort((a,b)=>b.count-a.count);
+  const maxVal=entries.length?entries[0].count:0;
   const assigned=state.tripData.assigned && state.tripData.assigned[t];
   let rx='';
   if(assigned){
+    const winnerPhoto = players[assigned.playerId] ? players[assigned.playerId].photo : null;
     rx=`<div class="rx" style="margin-top:14px">
       <div class="rx-label">Pegno del giorno</div>
-      <div class="rx-name">${esc(assigned.playerName)}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:6px 0 10px">
+        ${avatarHtml(winnerPhoto, assigned.playerName, 36)}
+        <div class="rx-name" style="margin:0">${esc(assigned.playerName)}</div>
+      </div>
       <div class="rx-text">${esc(assigned.pegno)}</div>
       <div class="rx-stamp">ESEGUITO ENTRO STASERA</div>
     </div>`;
@@ -645,8 +706,8 @@ function renderTabSettimana(){
     const day=(state.tripData.days && state.tripData.days[dstr])||{};
     Object.keys(day).forEach(id=>{ if(totals[id]!==undefined) totals[id]+=day[id]; });
   });
-  const entries=Object.keys(players).map(id=>[players[id].name, totals[id]||0]).sort((a,b)=>b[1]-a[1]);
-  const maxVal=entries.length?entries[0][1]:0;
+  const entries=Object.keys(players).map(id=>({name:players[id].name, count:totals[id]||0, photo:players[id].photo})).sort((a,b)=>b.count-a.count);
+  const maxVal=entries.length?entries[0].count:0;
   return `
     <div class="today-date">Classifica settimanale · lun–dom</div>
     <div class="card"><div class="chart-row">${entries.length?chartHtml(entries,maxVal):'<div class="empty">Nessun giocatore ancora.</div>'}</div></div>
@@ -672,17 +733,25 @@ function renderPegniHistory(){
 function renderTabPegni(){
   const pool=state.tripData.meta.pegniPool||{};
   const keys=Object.keys(pool);
-  const chips=keys.map(k=>`<span class="chip">${esc(pool[k])} <button onclick="actionRemovePegno('${k}')">✕</button></span>`).join('');
-  return `
-    <h2>Pool dei pegni</h2>
-    <p>Chi fa più lamentele oggi rischia uno di questi, estratto a caso.</p>
-    <div class="card">
-      ${keys.length?chips:'<p class="muted">Nessun pegno in lista, aggiungine uno qui sotto.</p>'}
+  const editable=isCreator();
+  const chips=keys.map(k=>editable
+    ? `<span class="chip">${esc(pool[k])} <button onclick="actionRemovePegno('${k}')">✕</button></span>`
+    : `<span class="chip">${esc(pool[k])}</span>`
+  ).join('');
+  const editSection = editable ? `
       <div class="divider"></div>
       <div class="row">
         <input id="newPegnoInput" placeholder="Nuovo pegno...">
         <button class="btn small" style="width:auto" onclick="actionAddPegno()">Aggiungi</button>
-      </div>
+      </div>` : `
+      <div class="divider"></div>
+      <p class="muted">Solo chi ha creato il viaggio può aggiungere o rimuovere pegni.</p>`;
+  return `
+    <h2>Pool dei pegni</h2>
+    <p>Chi fa più lamentele oggi rischia uno di questi, estratto a caso.</p>
+    <div class="card">
+      ${keys.length?chips:'<p class="muted">Nessun pegno in lista ancora.</p>'}
+      ${editSection}
     </div>
     <div class="card">
       <h2>Storico</h2>
@@ -693,7 +762,8 @@ function renderTabPegni(){
 
 function renderTabImpostazioni(){
   const players=state.tripData.players||{};
-  const playerChips=Object.keys(players).map(id=>`<span class="chip">${esc(players[id].name)}${id===state.playerId?' (tu)':''}</span>`).join('');
+  const playerChips=Object.keys(players).map(id=>`<span class="chip">${avatarHtml(players[id].photo, players[id].name, 22)} ${esc(players[id].name)}${id===state.playerId?' (tu)':''}</span>`).join('');
+  const myPhoto = players[state.playerId] ? players[state.playerId].photo : null;
   return `
     <h2>Il tuo viaggio</h2>
     <div class="card">
@@ -704,11 +774,20 @@ function renderTabImpostazioni(){
     </div>
     <div class="card">
       <h2>Giocatori</h2>
-      <div>${playerChips || '<p class="muted">Ancora nessuno.</p>'}</div>
+      <div style="display:flex;flex-wrap:wrap">${playerChips || '<p class="muted">Ancora nessuno.</p>'}</div>
     </div>
     <div class="card">
       <h2>Questo telefono</h2>
       <p>Sei registrato come <b>${esc(state.playerName)}</b> su questo viaggio, su questo telefono.</p>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        ${avatarHtml(myPhoto, state.playerName, 48)}
+        <div style="flex:1">
+          <input type="file" accept="image/*" capture="user" onchange="handlePhotoInput(this,'myPhotoPreview')">
+          <div id="myPhotoPreview"></div>
+        </div>
+      </div>
+      <button class="btn secondary" onclick="actionChangeMyPhoto()">Salva nuova foto</button>
+      <div class="divider"></div>
       <button class="btn secondary" onclick="actionSwitchPlayer()">Non sono io / cambia giocatore</button>
     </div>
     <div class="card">
