@@ -290,9 +290,17 @@ function save(key,val){ localStorage.setItem(key, typeof val==='string'?val:JSON
 function load(key){ const v=localStorage.getItem(key); if(v===null) return null; try{return JSON.parse(v);}catch(e){return v;} }
 
 /* ============ INIT ============ */
+const BUILTIN_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCMvugAxong-Tmd0qcV2FOLbgTOma-xdqg",
+  authDomain: "lamentometer2.firebaseapp.com",
+  databaseURL: "https://lamentometer2-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "lamentometer2",
+  storageBucket: "lamentometer2.firebasestorage.app",
+  messagingSenderId: "881409293146",
+  appId: "1:881409293146:web:edaae1ebd92f8944d21163"
+};
 function init(){
-  const cfg=load('lam_config');
-  if(!cfg){ state.screen='setup-firebase'; render(); return; }
+  const cfg=load('lam_config') || BUILTIN_FIREBASE_CONFIG;
   state.config=cfg;
   const ok=initFirebase(cfg);
   if(!ok) return;
