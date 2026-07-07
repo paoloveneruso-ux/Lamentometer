@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Lamentometro</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lamentometro">
+<meta name="theme-color" content="#163832">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEF3EE;
+    --paper-2:#E2EBE3;
+    --ink:#163832;
+    --ink-soft:#4B655F;
+    --line: rgba(22,56,50,0.16);
+    --red:#C6432F;
+    --red-bg:#F7E3DE;
+    --amber:#C98A1F;
+    --amber-bg:#F6ECD6;
+    --green:#3E7A57;
+    --green-bg:#E1EDE3;
+    --card:#FFFFFF;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior:none;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  #app{
+    max-width:520px;
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding-bottom:calc(72px + env(safe-area-inset-bottom));
+  }
+  .topbar{
+    padding:18px 18px 14px;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .brand{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .trip-name{font-size:20px;font-weight:800;margin-top:2px;}
+  .trip-switch{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:6px 9px;
+  }
+  .screen{padding:20px 18px 8px;flex:1;}
+  h1,h2,h3{margin:0 0 6px;}
+  h2{font-size:17px;font-weight:700;}
+  p{line-height:1.5;color:var(--ink-soft);}
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:14px;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    border-radius:10px;
+    padding:13px 18px;
+    font-size:15px;
+    font-weight:600;
+    font-family:'Inter',sans-serif;
+    cursor:pointer;
+    width:100%;
+  }
+  .btn:active{opacity:0.85;}
+  .btn.secondary{background:transparent;color:var(--ink);border:1px solid var(--line);}
+  .btn.danger{background:var(--red);}
+  .btn.small{width:auto;padding:9px 14px;font-size:13px;}
+  input,textarea{
+    width:100%;
+    font-family:'Inter',sans-serif;
+    font-size:15px;
+    padding:12px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--paper-2);
+    color:var(--ink);
+  }
+  textarea{font-family:'IBM Plex Mono',monospace;font-size:12px;min-height:120px;resize:vertical;}
+  label{font-size:12px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;}
+  .field{margin-bottom:14px;}
+  .steps{padding-left:18px;margin:0 0 14px;color:var(--ink-soft);}
+  .steps li{margin-bottom:8px;line-height:1.5;}
+  a{color:var(--ink);}
+
+  /* Player select */
+  .player-btn{
+    width:100%;text-align:left;background:var(--paper-2);border:1px solid var(--line);
+    border-radius:10px;padding:14px;margin-bottom:8px;font-size:15px;font-weight:600;cursor:pointer;
+  }
+
+  /* Tab bar */
+  .tabbar{
+    position:fixed;bottom:0;left:0;right:0;
+    display:flex;
+    background:var(--card);
+    border-top:1px solid var(--line);
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+    max-width:520px;margin:0 auto;
+  }
+  .tab{
+    flex:1;text-align:center;background:none;border:none;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.04em;
+    color:var(--ink-soft);padding:6px 2px;cursor:pointer;text-transform:uppercase;
+  }
+  .tab .ic{display:block;font-size:18px;margin-bottom:2px;}
+  .tab.active{color:var(--ink);font-weight:700;}
+
+  /* Oggi tab */
+  .today-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);text-transform:capitalize;margin-bottom:2px;}
+  .tap-wrap{display:flex;flex-direction:column;align-items:center;padding:30px 0 10px;}
+  .tap-count{font-family:'IBM Plex Mono',monospace;font-size:64px;font-weight:700;line-height:1;margin:10px 0 4px;}
+  .tap-btn{
+    width:180px;height:180px;border-radius:50%;
+    background:var(--ink);color:var(--paper);
+    border:none;font-size:15px;font-weight:700;font-family:'IBM Plex Mono',monospace;
+    text-transform:uppercase;letter-spacing:0.05em;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    box-shadow:0 6px 0 rgba(0,0,0,0.15);
+    cursor:pointer;
+  }
+  .tap-btn:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,0.15);}
+  .tap-sub{color:var(--ink-soft);font-size:13px;margin-top:14px;text-align:center;}
+
+  /* Chart / thermometer */
+  .chart-row{
+    display:flex;align-items:flex-end;gap:14px;
+    border-bottom:1px dashed var(--line);
+    padding:0 4px 12px;
+    margin-bottom:0;
+  }
+  .chart-item{flex:1;display:flex;flex-direction:column;align-items:center;}
+  .therm-track{
+    width:26px;height:110px;border-radius:13px;background:var(--paper-2);
+    border:1px solid var(--line);
+    display:flex;align-items:flex-end;overflow:hidden;position:relative;
+  }
+  .therm-fill{width:100%;border-radius:13px 13px 0 0;transition:height 0.3s;}
+  .therm-fill.zero{background:var(--green);opacity:0.35;}
+  .therm-fill.mid{background:var(--amber);}
+  .therm-fill.top{background:var(--red);}
+  .chart-count{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;margin-top:8px;}
+  .chart-name{font-size:11px;color:var(--ink-soft);margin-top:2px;text-align:center;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rank-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
+    background:var(--paper-2);border-radius:5px;padding:1px 6px;margin-bottom:4px;color:var(--ink-soft);
+  }
+  .rank-badge.gold{background:var(--red-bg);color:var(--red);}
+
+  /* Prescription card */
+  .rx{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;position:relative;overflow:hidden;
+  }
+  .rx::before{
+    content:"℞";position:absolute;top:8px;right:14px;font-size:46px;color:var(--line);font-weight:700;
+  }
+  .rx-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);}
+  .rx-name{font-size:16px;font-weight:700;margin:4px 0 10px;}
+  .rx-text{font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;line-height:1.4;}
+  .rx-stamp{
+    display:inline-block;margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    border:1px solid var(--red);color:var(--red);border-radius:6px;padding:3px 8px;transform:rotate(-3deg);
+  }
+
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;background:var(--paper-2);border:1px solid var(--line);
+    border-radius:20px;padding:7px 12px;font-size:13px;margin:0 6px 8px 0;
+  }
+  .chip button{background:none;border:none;color:var(--ink-soft);font-size:13px;cursor:pointer;padding:0;}
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+  .muted{color:var(--ink-soft);font-size:13px;}
+  .code-box{
+    font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:700;letter-spacing:0.12em;
+    background:var(--paper-2);border:1px dashed var(--line);border-radius:10px;padding:14px;text-align:center;margin-bottom:10px;
+  }
+  .divider{height:1px;background:var(--line);margin:16px 0;}
+  .empty{
+    text-align:center;padding:30px 14px;color:var(--ink-soft);font-size:14px;
+  }
+  .history-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .history-item:last-child{border-bottom:none;}
+  select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--paper-2);font-family:'Inter',sans-serif;font-size:15px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ============ STATE ============ */
+let db=null, tripRef=null, tripListenerFn=null;
+const state={
+  screen:'loading', // loading | setup-firebase | trip-select | join-trip | new-trip | player-select | main
+  config:null,
+  trips:[], // [{id,name}]
+  activeTripId:null,
+  tripData:null, // {meta:{name,pegniPool:{}},players:{},days:{},assigned:{}}
+  playerId:null,
+  playerName:null,
+  activeTab:'oggi',
+  error:null
+};
+
+const DEFAULT_PEGNI = [
+  "Fai un balletto imbarazzante davanti a tutti",
+  "Parla in rima per la prossima ora",
+  "Offri il gelato a tutto il gruppo",
+  "Fai da autista/navigatore designato domani",
+  "Fai la sveglia a tutti domani mattina",
+  "Porta gli zaini di tutti per un'ora",
+  "Canta una canzone a scelta del gruppo, in pubblico",
+  "Prepara la colazione per tutti domani",
+  "Rifai il letto di un altro giocatore",
+  "Zero lamentele consentite domani, pena doppio pegno"
+];
+
+/* ============ HELPERS ============ */
+function todayStr(d){ d=d||new Date(); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function prettyDate(dstr){
+  const d=new Date(dstr+'T12:00:00');
+  return d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
+}
+function mondayOf(d){
+  d=new Date(d); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1);
+  const m=new Date(d); m.setDate(diff); m.setHours(0,0,0,0); return m;
+}
+function currentWeekDates(){
+  const mon=mondayOf(new Date());
+  const arr=[];
+  for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); arr.push(todayStr(d)); }
+  return arr;
+}
+function genCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s=''; for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function parseFirebaseConfig(text){
+  try{
+    const match=text.match(/{[\s\S]*}/);
+    const objText=match?match[0]:text;
+    const obj=Function('"use strict"; return ('+objText+')')();
+    if(obj && obj.apiKey && obj.databaseURL) return obj;
+  }catch(e){}
+  return null;
+}
+function save(key,val){ localStorage.setItem(key, typeof val==='string'?val:JSON.stringify(val)); }
+function load(key){ const v=localStorage.getItem(key); if(v===null) return null; try{return JSON.parse(v);}catch(e){return v;} }
+
+/* ============ INIT ============ */
+function init(){
+  const cfg=load('lam_config');
+  if(!cfg){ state.screen='setup-firebase'; render(); return; }
+  state.config=cfg;
+  const ok=initFirebase(cfg);
+  if(!ok) return;
+  const trips=load('lam_trips')||[];
+  state.trips=trips;
+  const active=load('lam_activeTrip');
+  if(trips.length===0){ state.screen='trip-select'; render(); return; }
+  attachTrip(active && trips.find(t=>t.id===active) ? active : trips[0].id);
+}
+function initFirebase(cfg){
+  if(typeof firebase === 'undefined'){
+    db=null;
+    state.error="NETLOAD";
+    state.screen='setup-firebase';
+    render();
+    return false;
+  }
+  try{
+    if(firebase.apps && firebase.apps.length){
+      firebase.app().delete().catch(()=>{});
+    }
+    firebase.initializeApp(cfg);
+    db=firebase.database();
+    return true;
+  }catch(e){
+    db=null;
+    state.error="Errore di configurazione Firebase: "+(e && e.message ? e.message : e)+". Ricontrolla di aver incollato apiKey, authDomain e databaseURL corretti (e che il Realtime Database sia stato creato nella console).";
+    state.screen='setup-firebase';
+    render();
+    return false;
+  }
+}
+
+function attachTrip(tripId){
+  if(tripRef && tripListenerFn) tripRef.off('value', tripListenerFn);
+  state.activeTripId=tripId;
+  save('lam_activeTrip', tripId);
+  state.screen='loading';
+  render();
+  tripRef=db.ref('trips/'+tripId);
+  tripListenerFn=tripRef.on('value', snap=>{
+    const val=snap.val();
+    if(!val){ state.error="Questo viaggio non esiste più."; state.screen='trip-select'; render(); return; }
+    state.tripData=val;
+    if(state.trips.some(t=>t.id===tripId) === false){
+      state.trips.push({id:tripId,name:val.meta && val.meta.name || tripId});
+      save('lam_trips', state.trips);
+    } else if(val.meta && val.meta.name){
+      const t=state.trips.find(t=>t.id===tripId);
+      if(t) t.name=val.meta.name;
+      save('lam_trips', state.trips);
+    }
+    const pd=load('lam_player_'+tripId);
+    if(pd && val.players && val.players[pd.id]){
+      state.playerId=pd.id; state.playerName=val.players[pd.id].name;
+      state.screen='main';
+    } else {
+      state.screen='player-select';
+    }
+    render();
+  });
+}
+
+/* ============ ACTIONS ============ */
+function actionSaveFirebaseConfig(){
+  const txt=document.getElementById('fbConfigInput').value;
+  const cfg=parseFirebaseConfig(txt);
+  if(!cfg){ state.error="Non riesco a leggere questa configurazione. Ricontrolla di aver incollato tutto l'oggetto firebaseConfig."; render(); return; }
+  save('lam_config',cfg);
+  state.config=cfg; state.error=null;
+  const ok=initFirebase(cfg);
+  if(!ok) return;
+  state.screen='trip-select';
+  render();
+}
+
+function actionCreateTrip(){
+  if(!db){ state.error="Il database non è collegato. Torna a Setup e ricontrolla la configurazione Firebase."; state.screen='setup-firebase'; render(); return; }
+  const name=document.getElementById('newTripName').value.trim();
+  if(!name){ state.error="Dai un nome al viaggio."; render(); return; }
+  const id=genCode();
+  const pegniObj={}; DEFAULT_PEGNI.forEach(p=>{ pegniObj[db.ref().push().key]=p; });
+  db.ref('trips/'+id+'/meta').set({name, createdAt:Date.now(), pegniPool:pegniObj}).then(()=>{
+    state.trips.push({id,name}); save('lam_trips', state.trips);
+    state.error=null;
+    attachTrip(id);
+  });
+}
+
+function actionJoinTrip(){
+  if(!db){ state.error="Il database non è collegato. Torna a Setup e ricontrolla la configurazione Firebase."; state.screen='setup-firebase'; render(); return; }
+  const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
+  if(!code){ return; }
+  db.ref('trips/'+code+'/meta').once('value').then(snap=>{
+    if(!snap.exists()){ state.error="Nessun viaggio trovato con questo codice."; render(); return; }
+    const name=snap.val().name;
+    if(!state.trips.some(t=>t.id===code)){ state.trips.push({id:code,name}); save('lam_trips', state.trips); }
+    state.error=null;
+    attachTrip(code);
+  });
+}
+
+function actionSwitchTrip(id){ attachTrip(id); }
+
+function actionSelectPlayer(id,name){
+  save('lam_player_'+state.activeTripId, {id,name});
+  state.playerId=id; state.playerName=name; state.screen='main';
+  render();
+}
+
+function actionAddPlayer(){
+  const name=document.getElementById('newPlayerName').value.trim();
+  if(!name){ return; }
+  const ref=db.ref('trips/'+state.activeTripId+'/players').push();
+  ref.set({name}).then(()=>{ actionSelectPlayer(ref.key, name); });
+}
+
+function actionSwitchPlayer(){
+  localStorage.removeItem('lam_player_'+state.activeTripId);
+  state.playerId=null; state.screen='player-select';
+  render();
+}
+
+function actionAddComplaint(){
+  const t=todayStr();
+  const ref=db.ref(`trips/${state.activeTripId}/days/${t}/${state.playerId}`);
+  ref.transaction(cur=>(cur||0)+1);
+}
+
+function actionAssignPegno(){
+  const t=todayStr();
+  const days=(state.tripData.days && state.tripData.days[t]) || {};
+  const players=state.tripData.players || {};
+  let max=-1;
+  Object.keys(players).forEach(pid=>{ const c=days[pid]||0; if(c>max) max=c; });
+  if(max<=0){ state.error="Nessuna lamentela registrata oggi: niente pegno."; render(); return; }
+  const top=Object.keys(players).filter(pid=>(days[pid]||0)===max);
+  const winner=top[Math.floor(Math.random()*top.length)];
+  const pool=state.tripData.meta.pegniPool || {};
+  const keys=Object.keys(pool);
+  if(keys.length===0){ state.error="Aggiungi almeno un pegno nella scheda Pegni prima di estrarlo."; render(); return; }
+  const pegnoKey=keys[Math.floor(Math.random()*keys.length)];
+  db.ref(`trips/${state.activeTripId}/assigned/${t}`).set({
+    playerId:winner, playerName:players[winner].name, pegno:pool[pegnoKey], ts:Date.now()
+  });
+}
+
+function actionAddPegno(){
+  const input=document.getElementById('newPegnoInput');
+  const val=input.value.trim();
+  if(!val) return;
+  db.ref(`trips/${state.activeTripId}/meta/pegniPool`).push(val);
+  input.value='';
+}
+
+function actionRemovePegno(key){
+  db.ref(`trips/${state.activeTripId}/meta/pegniPool/${key}`).remove();
+}
+
+function setTab(tab){ state.activeTab=tab; render(); }
+
+/* ============ RENDER ============ */
+function render(){
+  const app=document.getElementById('app');
+  if(state.screen==='loading'){ app.innerHTML=renderLoading(); return; }
+  if(state.screen==='setup-firebase'){ app.innerHTML=renderSetupFirebase(); return; }
+  if(state.screen==='trip-select'){ app.innerHTML=renderTripSelect(); return; }
+  if(state.screen==='player-select'){ app.innerHTML=renderPlayerSelect(); return; }
+  if(state.screen==='main'){ app.innerHTML=renderMain(); return; }
+}
+
+function renderLoading(){
+  return `<div class="screen"><p class="mono">Caricamento…</p></div>`;
+}
+
+function renderSetupFirebase(){
+  return `
+  <div class="topbar"><div class="brand">Lamentometro</div><div class="trip-name">Configurazione</div></div>
+  <div class="screen">
+    <div class="card">
+      <h2>Collega il database gratuito</h2>
+      <p>Per far sincronizzare i telefoni di tutto il gruppo in tempo reale serve un database gratuito su Firebase (Google). Si fa una volta sola, dura 2 minuti, non serve carta di credito.</p>
+      <ol class="steps">
+        <li>Vai su <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> e crea un nuovo progetto (nome a piacere).</li>
+        <li>Nel menu a sinistra apri <b>Realtime Database</b> → crea database → scegli "Avvia in modalità di test".</li>
+        <li>Vai su Impostazioni progetto (icona ingranaggio) → sezione "Le tue app" → crea una Web App (icona &lt;/&gt;).</li>
+        <li>Copia tutto l'oggetto <span class="mono">firebaseConfig</span> che appare e incollalo qui sotto.</li>
+      </ol>
+      ${state.error==='NETLOAD' ? `
+        <div class="card" style="background:var(--amber-bg);border-color:var(--amber)">
+          <p style="color:var(--ink);margin:0 0 10px"><b>Non riesco a caricare le librerie Firebase da internet.</b> Controlla di avere connessione dati/wifi attiva, e assicurati di aver aperto il file nel browser (Safari/Chrome) e non in un'anteprima file. Poi riprova.</p>
+          <button class="btn secondary" onclick="location.reload()">Riprova</button>
+        </div>
+      ` : (state.error?`<p style="color:var(--red)">${esc(state.error)}</p>`:'')}
+      <div class="field">
+        <label>Incolla qui firebaseConfig</label>
+        <textarea id="fbConfigInput" placeholder='const firebaseConfig = { apiKey: "...", authDomain: "...", databaseURL: "...", projectId: "...", ... };'></textarea>
+      </div>
+      <button class="btn" onclick="actionSaveFirebaseConfig()">Continua</button>
+    </div>
+  </div>`;
+}
+
+function renderTripSelect(){
+  const tripsHtml = state.trips.map(t=>`
+    <button class="player-btn" onclick="actionSwitchTrip('${t.id}')">${esc(t.name)} <span class="muted mono">· ${t.id}</span></button>
+  `).join('');
+  return `
+  <div class="topbar"><div class="brand">Lamentometro</div><div class="trip-name">I tuoi viaggi</div></div>
+  <div class="screen">
+    ${state.error?`<p style="color:var(--red)">${esc(state.error)}</p>`:''}
+    ${state.trips.length? `<div class="card">${tripsHtml}</div>` : `<div class="empty">Nessun viaggio ancora. Creane uno o unisciti con un codice.</div>`}
+    <div class="card">
+      <h2>Crea un nuovo viaggio</h2>
+      <p>Utile anche per fare una prova prima di partire.</p>
+      <div class="field"><input id="newTripName" placeholder="Es. Grecia 2026 (prova)"></div>
+      <button class="btn" onclick="actionCreateTrip()">Crea viaggio</button>
+    </div>
+    <div class="card">
+      <h2>Unisciti a un viaggio esistente</h2>
+      <p>Chiedi il codice a chi ha creato il viaggio.</p>
+      <div class="field"><input id="joinCodeInput" placeholder="Codice, es. AB12CD" style="text-transform:uppercase"></div>
+      <button class="btn secondary" onclick="actionJoinTrip()">Unisciti</button>
+    </div>
+  </div>`;
+}
+
+function renderPlayerSelect(){
+  const players=(state.tripData && state.tripData.players) || {};
+  const keys=Object.keys(players);
+  const list=keys.map(id=>`<button class="player-btn" onclick="actionSelectPlayer('${id}','${esc(players[id].name).replace(/'/g,"\\'")}')">Sono io: ${esc(players[id].name)}</button>`).join('');
+  return `
+  <div class="topbar"><div class="brand">Lamentometro</div><div class="trip-name">${esc(state.tripData.meta.name)}</div></div>
+  <div class="screen">
+    <h2>Chi sei tu?</h2>
+    <p>Scegli il tuo nome se è già nella lista, oppure aggiungiti. Questo telefono se lo ricorderà.</p>
+    ${list?`<div class="card">${list}</div>`:''}
+    <div class="card">
+      <label>Aggiungi il tuo nome</label>
+      <div class="row" style="margin-top:8px">
+        <input id="newPlayerName" placeholder="Il tuo nome">
+      </div>
+      <button class="btn" style="margin-top:10px" onclick="actionAddPlayer()">Sono nuovo, aggiungimi</button>
+    </div>
+    <button class="btn secondary" onclick="state.screen='trip-select';render()">← Cambia viaggio</button>
+  </div>`;
+}
+
+function renderMain(){
+  const tripSwitcher = state.trips.length>1 ? `
+    <select onchange="actionSwitchTrip(this.value)">
+      ${state.trips.map(t=>`<option value="${t.id}" ${t.id===state.activeTripId?'selected':''}>${esc(t.name)}</option>`).join('')}
+    </select>` : '';
+  let body='';
+  if(state.activeTab==='oggi') body=renderTabOggi();
+  else if(state.activeTab==='giorno') body=renderTabGiorno();
+  else if(state.activeTab==='settimana') body=renderTabSettimana();
+  else if(state.activeTab==='pegni') body=renderTabPegni();
+  else if(state.activeTab==='impostazioni') body=renderTabImpostazioni();
+
+  return `
+  <div class="topbar">
+    <div class="topbar-row">
+      <div>
+        <div class="brand">Lamentometro</div>
+        <div class="trip-name">${esc(state.tripData.meta.name)}</div>
+      </div>
+      <div style="max-width:150px">${tripSwitcher}</div>
+    </div>
+  </div>
+  <div class="screen">${body}</div>
+  <div class="tabbar">
+    <button class="tab ${state.activeTab==='oggi'?'active':''}" onclick="setTab('oggi')"><span class="ic">＋</span>Oggi</button>
+    <button class="tab ${state.activeTab==='giorno'?'active':''}" onclick="setTab('giorno')"><span class="ic">☰</span>Giorno</button>
+    <button class="tab ${state.activeTab==='settimana'?'active':''}" onclick="setTab('settimana')"><span class="ic">▦</span>Settimana</button>
+    <button class="tab ${state.activeTab==='pegni'?'active':''}" onclick="setTab('pegni')"><span class="ic">℞</span>Pegni</button>
+    <button class="tab ${state.activeTab==='impostazioni'?'active':''}" onclick="setTab('impostazioni')"><span class="ic">⚙</span>Setup</button>
+  </div>`;
+}
+
+function renderTabOggi(){
+  const t=todayStr();
+  const myCount=(state.tripData.days && state.tripData.days[t] && state.tripData.days[t][state.playerId])||0;
+  return `
+    <div class="today-date">${prettyDate(t)}</div>
+    <div class="tap-wrap">
+      <div class="mono muted" style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em">${esc(state.playerName)}</div>
+      <div class="tap-count">${myCount}</div>
+      <div class="muted" style="margin-bottom:16px">lamentele registrate oggi</div>
+      <button class="tap-btn" onclick="actionAddComplaint()">+1<br>lamentela</button>
+      <div class="tap-sub">Tocca ogni volta che ti lamenti. Si è salvi solo quando si è da soli.</div>
+    </div>
+  `;
+}
+
+function chartHtml(entries, maxVal){
+  return entries.map(([name,count],i)=>{
+    const pct = maxVal>0 ? Math.max(count/maxVal*100, count>0?14:4) : 4;
+    const cls = count===0 ? 'zero' : (count===maxVal && maxVal>0 ? 'top' : 'mid');
+    const badge = i===0 && maxVal>0 ? `<div class="rank-badge gold">TOP</div>` : `<div class="rank-badge">#${i+1}</div>`;
+    return `<div class="chart-item">
+      ${badge}
+      <div class="therm-track"><div class="therm-fill ${cls}" style="height:${pct}%"></div></div>
+      <div class="chart-count">${count}</div>
+      <div class="chart-name">${esc(name)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTabGiorno(){
+  const t=todayStr();
+  const players=state.tripData.players||{};
+  const days=(state.tripData.days && state.tripData.days[t])||{};
+  const entries=Object.keys(players).map(id=>[players[id].name, days[id]||0]).sort((a,b)=>b[1]-a[1]);
+  const maxVal=entries.length?entries[0][1]:0;
+  const assigned=state.tripData.assigned && state.tripData.assigned[t];
+  let rx='';
+  if(assigned){
+    rx=`<div class="rx" style="margin-top:14px">
+      <div class="rx-label">Pegno del giorno</div>
+      <div class="rx-name">${esc(assigned.playerName)}</div>
+      <div class="rx-text">${esc(assigned.pegno)}</div>
+      <div class="rx-stamp">ESEGUITO ENTRO STASERA</div>
+    </div>`;
+  } else {
+    rx=`<button class="btn danger" style="margin-top:14px" onclick="actionAssignPegno()">Estrai il pegno di oggi</button>`;
+  }
+  return `
+    <div class="today-date">Classifica di oggi · ${prettyDate(t)}</div>
+    <div class="card"><div class="chart-row">${entries.length?chartHtml(entries,maxVal):'<div class="empty">Nessun giocatore ancora.</div>'}</div></div>
+    ${rx}
+    ${state.error?`<p style="color:var(--red);margin-top:10px">${esc(state.error)}</p>`:''}
+  `;
+}
+
+function renderTabSettimana(){
+  const players=state.tripData.players||{};
+  const week=currentWeekDates();
+  const totals={};
+  Object.keys(players).forEach(id=>totals[id]=0);
+  week.forEach(dstr=>{
+    const day=(state.tripData.days && state.tripData.days[dstr])||{};
+    Object.keys(day).forEach(id=>{ if(totals[id]!==undefined) totals[id]+=day[id]; });
+  });
+  const entries=Object.keys(players).map(id=>[players[id].name, totals[id]||0]).sort((a,b)=>b[1]-a[1]);
+  const maxVal=entries.length?entries[0][1]:0;
+  return `
+    <div class="today-date">Classifica settimanale · lun–dom</div>
+    <div class="card"><div class="chart-row">${entries.length?chartHtml(entries,maxVal):'<div class="empty">Nessun giocatore ancora.</div>'}</div></div>
+    <div class="card">
+      <h2>Storico pegni</h2>
+      ${renderPegniHistory()}
+    </div>
+  `;
+}
+
+function renderPegniHistory(){
+  const assigned=state.tripData.assigned||{};
+  const dates=Object.keys(assigned).sort().reverse();
+  if(!dates.length) return `<p class="muted">Ancora nessun pegno assegnato.</p>`;
+  return dates.map(d=>`
+    <div class="history-item">
+      <span>${prettyDate(d)}<br><b>${esc(assigned[d].playerName)}</b></span>
+      <span style="text-align:right">${esc(assigned[d].pegno)}</span>
+    </div>
+  `).join('');
+}
+
+function renderTabPegni(){
+  const pool=state.tripData.meta.pegniPool||{};
+  const keys=Object.keys(pool);
+  const chips=keys.map(k=>`<span class="chip">${esc(pool[k])} <button onclick="actionRemovePegno('${k}')">✕</button></span>`).join('');
+  return `
+    <h2>Pool dei pegni</h2>
+    <p>Chi fa più lamentele oggi rischia uno di questi, estratto a caso.</p>
+    <div class="card">
+      ${keys.length?chips:'<p class="muted">Nessun pegno in lista, aggiungine uno qui sotto.</p>'}
+      <div class="divider"></div>
+      <div class="row">
+        <input id="newPegnoInput" placeholder="Nuovo pegno...">
+        <button class="btn small" style="width:auto" onclick="actionAddPegno()">Aggiungi</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Storico</h2>
+      ${renderPegniHistory()}
+    </div>
+  `;
+}
+
+function renderTabImpostazioni(){
+  const players=state.tripData.players||{};
+  const playerChips=Object.keys(players).map(id=>`<span class="chip">${esc(players[id].name)}${id===state.playerId?' (tu)':''}</span>`).join('');
+  return `
+    <h2>Il tuo viaggio</h2>
+    <div class="card">
+      <label>Codice per invitare altri</label>
+      <div class="code-box">${state.activeTripId}</div>
+      <button class="btn secondary" onclick="navigator.clipboard && navigator.clipboard.writeText('${state.activeTripId}')">Copia codice</button>
+      <p class="muted" style="margin-top:10px">Ogni persona apre l'app sul proprio telefono, sceglie "Unisciti a un viaggio esistente" e inserisce questo codice.</p>
+    </div>
+    <div class="card">
+      <h2>Giocatori</h2>
+      <div>${playerChips || '<p class="muted">Ancora nessuno.</p>'}</div>
+    </div>
+    <div class="card">
+      <h2>Questo telefono</h2>
+      <p>Sei registrato come <b>${esc(state.playerName)}</b> su questo viaggio, su questo telefono.</p>
+      <button class="btn secondary" onclick="actionSwitchPlayer()">Non sono io / cambia giocatore</button>
+    </div>
+    <div class="card">
+      <h2>Altri viaggi</h2>
+      <button class="btn secondary" onclick="state.screen='trip-select';render()">Gestisci / crea nuovo viaggio</button>
+    </div>
+  `;
+}
+
+init();
+</script>
+</body>
+</html>
