@@ -296,6 +296,13 @@ function getDeviceId(){
 function isCreator(){
   return !!(state.tripData && state.tripData.meta && state.tripData.meta.creatorDevice === getDeviceId());
 }
+function hasCreator(){
+  return !!(state.tripData && state.tripData.meta && state.tripData.meta.creatorDevice);
+}
+function actionClaimCreator(){
+  if(hasCreator()) return;
+  db.ref(`trips/${state.activeTripId}/meta/creatorDevice`).set(getDeviceId());
+}
 function avatarHtml(photo,name,size){
   size=size||40;
   if(photo){
@@ -477,6 +484,21 @@ function actionAddComplaint(){
   ref.transaction(cur=>(cur||0)+1);
 }
 
+function actionAdminAdjust(playerId, delta){
+  if(!isCreator()) return;
+  const t=state.adminDate || todayStr();
+  const ref=db.ref(`trips/${state.activeTripId}/days/${t}/${playerId}`);
+  ref.transaction(cur=>{ const v=(cur||0)+delta; return v<0?0:v; });
+}
+
+function actionAdminSet(playerId, inputEl){
+  if(!isCreator()) return;
+  const t=state.adminDate || todayStr();
+  let v=parseInt(inputEl.value,10);
+  if(isNaN(v) || v<0) v=0;
+  db.ref(`trips/${state.activeTripId}/days/${t}/${playerId}`).set(v);
+}
+
 function actionAssignPegno(){
   const t=todayStr();
   const days=(state.tripData.days && state.tripData.days[t]) || {};
@@ -613,7 +635,10 @@ function renderMain(){
   else if(state.activeTab==='giorno') body=renderTabGiorno();
   else if(state.activeTab==='settimana') body=renderTabSettimana();
   else if(state.activeTab==='pegni') body=renderTabPegni();
+  else if(state.activeTab==='admin') body=renderTabAdmin();
   else if(state.activeTab==='impostazioni') body=renderTabImpostazioni();
+
+  const adminTab = isCreator() ? `<button class="tab ${state.activeTab==='admin'?'active':''}" onclick="setTab('admin')"><span class="ic">✎</span>Gestione</button>` : '';
 
   return `
   <div class="topbar">
@@ -631,6 +656,7 @@ function renderMain(){
     <button class="tab ${state.activeTab==='giorno'?'active':''}" onclick="setTab('giorno')"><span class="ic">☰</span>Giorno</button>
     <button class="tab ${state.activeTab==='settimana'?'active':''}" onclick="setTab('settimana')"><span class="ic">▦</span>Settimana</button>
     <button class="tab ${state.activeTab==='pegni'?'active':''}" onclick="setTab('pegni')"><span class="ic">℞</span>Pegni</button>
+    ${adminTab}
     <button class="tab ${state.activeTab==='impostazioni'?'active':''}" onclick="setTab('impostazioni')"><span class="ic">⚙</span>Setup</button>
   </div>`;
 }
@@ -760,12 +786,45 @@ function renderTabPegni(){
   `;
 }
 
+function renderTabAdmin(){
+  if(!isCreator()){
+    return `<div class="empty">Questa sezione è riservata all'amministratore del viaggio.</div>`;
+  }
+  const t=state.adminDate || todayStr();
+  const players=state.tripData.players||{};
+  const days=(state.tripData.days && state.tripData.days[t])||{};
+  const rows=Object.keys(players).map(id=>{
+    const count=days[id]||0;
+    return `<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:12px">
+      ${avatarHtml(players[id].photo, players[id].name, 36)}
+      <div style="flex:1;font-weight:600">${esc(players[id].name)}</div>
+      <button class="btn small secondary" style="width:36px;padding:8px 0" onclick="actionAdminAdjust('${id}',-1)">−</button>
+      <input class="mono" style="width:52px;text-align:center;padding:8px 4px" value="${count}" onchange="actionAdminSet('${id}',this)">
+      <button class="btn small secondary" style="width:36px;padding:8px 0" onclick="actionAdminAdjust('${id}',1)">+</button>
+    </div>`;
+  }).join('');
+  return `
+    <h2>Gestione lamentele</h2>
+    <p>Correggi o azzera le lamentele registrate per errore. Visibile solo a te come amministratore.</p>
+    <div class="field">
+      <label>Giorno da modificare</label>
+      <input type="date" value="${t}" onchange="state.adminDate=this.value; render()">
+    </div>
+    ${rows || '<div class="empty">Nessun giocatore ancora.</div>'}
+  `;
+}
+
 function renderTabImpostazioni(){
   const players=state.tripData.players||{};
   const playerChips=Object.keys(players).map(id=>`<span class="chip">${avatarHtml(players[id].photo, players[id].name, 22)} ${esc(players[id].name)}${id===state.playerId?' (tu)':''}</span>`).join('');
   const myPhoto = players[state.playerId] ? players[state.playerId].photo : null;
   return `
     <h2>Il tuo viaggio</h2>
+    ${!hasCreator() ? `
+    <div class="card" style="background:var(--amber-bg);border-color:var(--amber)">
+      <p style="margin:0 0 10px"><b>Questo viaggio non ha ancora un amministratore</b> (probabilmente creato prima di questa funzione). Se lo hai creato tu, reclama il ruolo per gestire pegni e lamentele.</p>
+      <button class="btn secondary" onclick="actionClaimCreator()">Diventa amministratore di questo viaggio</button>
+    </div>` : ''}
     <div class="card">
       <label>Codice per invitare altri</label>
       <div class="code-box">${state.activeTripId}</div>
