@@ -243,17 +243,20 @@ const state={
 };
 
 const DEFAULT_PEGNI = [
-  "Fai un balletto imbarazzante davanti a tutti",
-  "Parla in rima per la prossima ora",
-  "Offri il gelato a tutto il gruppo",
-  "Fai da autista/navigatore designato domani",
-  "Fai la sveglia a tutti domani mattina",
-  "Porta gli zaini di tutti per un'ora",
-  "Canta una canzone a scelta del gruppo, in pubblico",
-  "Prepara la colazione per tutti domani",
-  "Rifai il letto di un altro giocatore",
-  "Zero lamentele consentite domani, pena doppio pegno"
+  {text:"Offri il gelato a tutto il gruppo", level:"facile"},
+  {text:"Fai la sveglia a tutti domani mattina", level:"facile"},
+  {text:"Prepara la colazione per tutti domani", level:"facile"},
+  {text:"Fai un balletto imbarazzante davanti a tutti", level:"medio"},
+  {text:"Parla in rima per la prossima ora", level:"medio"},
+  {text:"Porta gli zaini di tutti per un'ora", level:"medio"},
+  {text:"Rifai il letto di un altro giocatore", level:"medio"},
+  {text:"Canta una canzone a scelta del gruppo, in pubblico", level:"difficile"},
+  {text:"Fai da autista/navigatore designato domani", level:"difficile"},
+  {text:"Zero lamentele consentite domani, pena doppio pegno", level:"difficile"}
 ];
+const PEGNO_LEVELS = ['facile','medio','difficile'];
+const LEVEL_LABEL = {facile:'Facile', medio:'Medio', difficile:'Difficile'};
+const LEVEL_COLOR = {facile:'var(--green)', medio:'var(--amber)', difficile:'var(--red)'};
 
 /* ============ HELPERS ============ */
 function todayStr(d){ d=d||new Date(); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
@@ -481,7 +484,37 @@ function actionSwitchPlayer(){
 function actionAddComplaint(){
   const t=todayStr();
   const ref=db.ref(`trips/${state.activeTripId}/days/${t}/${state.playerId}`);
-  ref.transaction(cur=>(cur||0)+1);
+  ref.transaction(cur=>(cur||0)+1, (err, committed, snap)=>{
+    if(!err && committed && snap){
+      const newVal=snap.val();
+      if(newVal>1){ autoAssignPegno(state.playerId, state.playerName, newVal, t); }
+    }
+  });
+}
+
+function autoAssignPegno(playerId, playerName, complaintNumber, dateStr){
+  const pool=state.tripData.meta.pegniPool || {};
+  const keys=Object.keys(pool);
+  if(!keys.length) return; // nessun pegno in pool: si salta silenziosamente
+  // difficoltà in base a quante lamentele "a pagamento" ha fatto oggi (la prima è gratis)
+  const paidCount=complaintNumber-1; // 1 = prima a pagamento -> facile, 2 -> medio, 3+ -> difficile
+  const tierIndex=Math.min(paidCount-1, PEGNO_LEVELS.length-1);
+  let chosenKey=null, chosenLevel=null;
+  for(let i=tierIndex;i>=0 && !chosenKey;i--){
+    const matches=keys.filter(k=>pool[k].level===PEGNO_LEVELS[i]);
+    if(matches.length){ chosenKey=matches[Math.floor(Math.random()*matches.length)]; chosenLevel=PEGNO_LEVELS[i]; }
+  }
+  if(!chosenKey){
+    for(let i=tierIndex+1;i<PEGNO_LEVELS.length && !chosenKey;i++){
+      const matches=keys.filter(k=>pool[k].level===PEGNO_LEVELS[i]);
+      if(matches.length){ chosenKey=matches[Math.floor(Math.random()*matches.length)]; chosenLevel=PEGNO_LEVELS[i]; }
+    }
+  }
+  if(!chosenKey){ chosenKey=keys[Math.floor(Math.random()*keys.length)]; chosenLevel=pool[chosenKey].level||'facile'; }
+  const entry=pool[chosenKey];
+  db.ref(`trips/${state.activeTripId}/assigned/${dateStr}`).push().set({
+    playerId, playerName, pegno:entry.text, level:chosenLevel, complaintNumber, ts:Date.now()
+  });
 }
 
 function actionAdminAdjust(playerId, delta){
@@ -499,30 +532,14 @@ function actionAdminSet(playerId, inputEl){
   db.ref(`trips/${state.activeTripId}/days/${t}/${playerId}`).set(v);
 }
 
-function actionAssignPegno(){
-  const t=todayStr();
-  const days=(state.tripData.days && state.tripData.days[t]) || {};
-  const players=state.tripData.players || {};
-  let max=-1;
-  Object.keys(players).forEach(pid=>{ const c=days[pid]||0; if(c>max) max=c; });
-  if(max<=0){ state.error="Nessuna lamentela registrata oggi: niente pegno."; render(); return; }
-  const top=Object.keys(players).filter(pid=>(days[pid]||0)===max);
-  const winner=top[Math.floor(Math.random()*top.length)];
-  const pool=state.tripData.meta.pegniPool || {};
-  const keys=Object.keys(pool);
-  if(keys.length===0){ state.error="Aggiungi almeno un pegno nella scheda Pegni prima di estrarlo."; render(); return; }
-  const pegnoKey=keys[Math.floor(Math.random()*keys.length)];
-  db.ref(`trips/${state.activeTripId}/assigned/${t}`).set({
-    playerId:winner, playerName:players[winner].name, pegno:pool[pegnoKey], ts:Date.now()
-  });
-}
-
 function actionAddPegno(){
-  const input=document.getElementById('newPegnoInput');
   if(!isCreator()) return;
+  const input=document.getElementById('newPegnoInput');
+  const levelSel=document.getElementById('newPegnoLevel');
   const val=input.value.trim();
   if(!val) return;
-  db.ref(`trips/${state.activeTripId}/meta/pegniPool`).push(val);
+  const level=levelSel ? levelSel.value : 'facile';
+  db.ref(`trips/${state.activeTripId}/meta/pegniPool`).push({text:val, level});
   input.value='';
 }
 
@@ -661,6 +678,17 @@ function renderMain(){
   </div>`;
 }
 
+function xTallyHtml(count){
+  if(count<=0) return `<span class="muted" style="font-size:13px">Ancora nessuna lamentela oggi</span>`;
+  let html='';
+  for(let i=1;i<=count;i++){
+    const free=i===1;
+    html+=`<span class="mono" style="font-size:24px;font-weight:700;display:inline-block;margin:0 3px 6px;color:${free?'var(--green)':'var(--red)'}">✕</span>`;
+    if(i%5===0 && i<count) html+=`<span style="display:inline-block;width:12px"></span>`;
+  }
+  return html;
+}
+
 function renderTabOggi(){
   const t=todayStr();
   const myCount=(state.tripData.days && state.tripData.days[t] && state.tripData.days[t][state.playerId])||0;
@@ -671,9 +699,10 @@ function renderTabOggi(){
       ${avatarHtml(myPhoto, state.playerName, 56)}
       <div class="mono muted" style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin-top:8px">${esc(state.playerName)}</div>
       <div class="tap-count">${myCount}</div>
-      <div class="muted" style="margin-bottom:16px">lamentele registrate oggi</div>
+      <div class="muted" style="margin-bottom:14px">lamentele registrate oggi</div>
+      <div style="max-width:280px;text-align:center;margin-bottom:14px">${xTallyHtml(myCount)}</div>
       <button class="tap-btn" onclick="actionAddComplaint()">+1<br>lamentela</button>
-      <div class="tap-sub">Tocca ogni volta che ti lamenti. Si è salvi solo quando si è da soli.</div>
+      <div class="tap-sub">La prima lamentela del giorno è gratis (in verde). Dalla seconda in poi scatta subito un pegno, sempre più difficile.</div>
     </div>
   `;
 }
@@ -699,21 +728,25 @@ function renderTabGiorno(){
   const days=(state.tripData.days && state.tripData.days[t])||{};
   const entries=Object.keys(players).map(id=>({name:players[id].name, count:days[id]||0, photo:players[id].photo})).sort((a,b)=>b.count-a.count);
   const maxVal=entries.length?entries[0].count:0;
-  const assigned=state.tripData.assigned && state.tripData.assigned[t];
+  const assignedToday=(state.tripData.assigned && state.tripData.assigned[t]) || {};
+  const todayKeys=Object.keys(assignedToday).sort((a,b)=>assignedToday[a].ts-assignedToday[b].ts);
   let rx='';
-  if(assigned){
-    const winnerPhoto = players[assigned.playerId] ? players[assigned.playerId].photo : null;
-    rx=`<div class="rx" style="margin-top:14px">
-      <div class="rx-label">Pegno del giorno</div>
-      <div style="display:flex;align-items:center;gap:10px;margin:6px 0 10px">
-        ${avatarHtml(winnerPhoto, assigned.playerName, 36)}
-        <div class="rx-name" style="margin:0">${esc(assigned.playerName)}</div>
-      </div>
-      <div class="rx-text">${esc(assigned.pegno)}</div>
-      <div class="rx-stamp">ESEGUITO ENTRO STASERA</div>
-    </div>`;
+  if(todayKeys.length){
+    rx=todayKeys.map(k=>{
+      const a=assignedToday[k];
+      const winnerPhoto = players[a.playerId] ? players[a.playerId].photo : null;
+      return `<div class="rx" style="margin-top:12px">
+        <div class="rx-label">Pegno · lamentela #${a.complaintNumber} · ${esc(LEVEL_LABEL[a.level]||a.level)}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:6px 0 10px">
+          ${avatarHtml(winnerPhoto, a.playerName, 36)}
+          <div class="rx-name" style="margin:0">${esc(a.playerName)}</div>
+        </div>
+        <div class="rx-text">${esc(a.pegno)}</div>
+        <div class="rx-stamp" style="border-color:${LEVEL_COLOR[a.level]||'var(--red)'};color:${LEVEL_COLOR[a.level]||'var(--red)'}">ESEGUITO ENTRO STASERA</div>
+      </div>`;
+    }).join('');
   } else {
-    rx=`<button class="btn danger" style="margin-top:14px" onclick="actionAssignPegno()">Estrai il pegno di oggi</button>`;
+    rx=`<p class="muted" style="margin-top:14px">Nessun pegno ancora oggi: il primo scatta in automatico dalla seconda lamentela di ciascuno.</p>`;
   }
   return `
     <div class="today-date">Classifica di oggi · ${prettyDate(t)}</div>
@@ -734,9 +767,25 @@ function renderTabSettimana(){
   });
   const entries=Object.keys(players).map(id=>({name:players[id].name, count:totals[id]||0, photo:players[id].photo})).sort((a,b)=>b.count-a.count);
   const maxVal=entries.length?entries[0].count:0;
+  const hasPlayers=entries.length>0;
+  const minVal=hasPlayers?Math.min(...entries.map(e=>e.count)):0;
+  const calmest=hasPlayers?entries.filter(e=>e.count===minVal):[];
+  const calmHtml = hasPlayers ? `
+    <div class="card" style="background:var(--green-bg);border-color:var(--green)">
+      <div class="rx-label" style="color:var(--green)">Più zen della settimana</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+        ${calmest.map(c=>`<div style="display:flex;align-items:center;gap:8px">${avatarHtml(c.photo,c.name,28)}<span style="font-weight:600">${esc(c.name)}</span></div>`).join('')}
+      </div>
+      <p class="muted" style="margin:8px 0 0">${minVal===0?'Zero lamentele questa settimana. Rispetto.':`Solo ${minVal} lamentel${minVal===1?'a':'e'} questa settimana.`}</p>
+    </div>` : '';
   return `
     <div class="today-date">Classifica settimanale · lun–dom</div>
     <div class="card"><div class="chart-row">${entries.length?chartHtml(entries,maxVal):'<div class="empty">Nessun giocatore ancora.</div>'}</div></div>
+    ${calmHtml}
+    <div class="card">
+      <h2>Il tuo calendario</h2>
+      ${renderCalendar(state.playerId)}
+    </div>
     <div class="card">
       <h2>Storico pegni</h2>
       ${renderPegniHistory()}
@@ -744,39 +793,89 @@ function renderTabSettimana(){
   `;
 }
 
+function renderCalendar(playerId){
+  const now=new Date();
+  const year=now.getFullYear(), month=now.getMonth();
+  const first=new Date(year,month,1);
+  const startOffset=(first.getDay()+6)%7; // lunedì=0
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const monthLabel=now.toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+  const dowLabels=['L','M','M','G','V','S','D'];
+  let cells='';
+  for(let i=0;i<startOffset;i++) cells+=`<div></div>`;
+  for(let day=1;day<=daysInMonth;day++){
+    const dstr=todayStr(new Date(year,month,day));
+    const count=(state.tripData.days && state.tripData.days[dstr] && state.tripData.days[dstr][playerId])||0;
+    let bg='var(--paper-2)', bd='var(--line)';
+    if(count===1){ bg='var(--green-bg)'; bd='var(--green)'; }
+    else if(count===2||count===3){ bg='var(--amber-bg)'; bd='var(--amber)'; }
+    else if(count>=4){ bg='var(--red-bg)'; bd='var(--red)'; }
+    const isToday = dstr===todayStr();
+    cells+=`<div style="aspect-ratio:1;border-radius:8px;background:${bg};border:${isToday?'2px solid var(--ink)':'1px solid '+bd};display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--ink-soft)">${day}</div>`;
+  }
+  return `
+    <div class="mono muted" style="font-size:12px;text-transform:capitalize;margin-bottom:8px">${monthLabel}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+      ${dowLabels.map(l=>`<div class="mono muted" style="font-size:10px;text-align:center">${l}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cells}</div>
+    <div class="muted" style="font-size:11px;margin-top:10px">🟩 1 lamentela (gratis) · 🟧 2–3 · 🟥 4+</div>
+  `;
+}
+
 function renderPegniHistory(){
   const assigned=state.tripData.assigned||{};
   const dates=Object.keys(assigned).sort().reverse();
   if(!dates.length) return `<p class="muted">Ancora nessun pegno assegnato.</p>`;
-  return dates.map(d=>`
-    <div class="history-item">
-      <span>${prettyDate(d)}<br><b>${esc(assigned[d].playerName)}</b></span>
-      <span style="text-align:right">${esc(assigned[d].pegno)}</span>
-    </div>
-  `).join('');
+  return dates.map(d=>{
+    const dayEntries=assigned[d];
+    const keys=Object.keys(dayEntries).sort((a,b)=>dayEntries[a].ts-dayEntries[b].ts);
+    return keys.map(k=>{
+      const a=dayEntries[k];
+      return `<div class="history-item">
+        <span>${prettyDate(d)}<br><b>${esc(a.playerName)}</b> <span class="mono muted" style="font-size:11px">${esc(LEVEL_LABEL[a.level]||'')}</span></span>
+        <span style="text-align:right">${esc(a.pegno)}</span>
+      </div>`;
+    }).join('');
+  }).join('');
 }
 
 function renderTabPegni(){
   const pool=state.tripData.meta.pegniPool||{};
   const keys=Object.keys(pool);
   const editable=isCreator();
-  const chips=keys.map(k=>editable
-    ? `<span class="chip">${esc(pool[k])} <button onclick="actionRemovePegno('${k}')">✕</button></span>`
-    : `<span class="chip">${esc(pool[k])}</span>`
-  ).join('');
+  const groups=PEGNO_LEVELS.map(level=>{
+    const levelKeys=keys.filter(k=>pool[k].level===level);
+    if(!levelKeys.length && !editable) return '';
+    const chips=levelKeys.map(k=>editable
+      ? `<span class="chip">${esc(pool[k].text)} <button onclick="actionRemovePegno('${k}')">✕</button></span>`
+      : `<span class="chip">${esc(pool[k].text)}</span>`
+    ).join('');
+    return `<div style="margin-bottom:14px">
+      <div class="rx-label" style="color:${LEVEL_COLOR[level]}">${LEVEL_LABEL[level]}</div>
+      <div style="margin-top:6px">${chips || '<p class="muted" style="margin:4px 0 0">Nessuno.</p>'}</div>
+    </div>`;
+  }).join('');
   const editSection = editable ? `
       <div class="divider"></div>
       <div class="row">
         <input id="newPegnoInput" placeholder="Nuovo pegno...">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="newPegnoLevel">
+          <option value="facile">Facile</option>
+          <option value="medio">Medio</option>
+          <option value="difficile">Difficile</option>
+        </select>
         <button class="btn small" style="width:auto" onclick="actionAddPegno()">Aggiungi</button>
       </div>` : `
       <div class="divider"></div>
       <p class="muted">Solo chi ha creato il viaggio può aggiungere o rimuovere pegni.</p>`;
   return `
     <h2>Pool dei pegni</h2>
-    <p>Chi fa più lamentele oggi rischia uno di questi, estratto a caso.</p>
+    <p>La prima lamentela del giorno è gratis. Dalla seconda in poi scatta subito un pegno: più ti lamenti nello stesso giorno, più sale la difficoltà.</p>
     <div class="card">
-      ${keys.length?chips:'<p class="muted">Nessun pegno in lista ancora.</p>'}
+      ${keys.length?groups:'<p class="muted">Nessun pegno in lista ancora.</p>'}
       ${editSection}
     </div>
     <div class="card">
