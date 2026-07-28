@@ -279,6 +279,10 @@ function genCode(){
   let s=''; for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)];
   return s;
 }
+function genAdminCode(){
+  let s=''; for(let i=0;i<4;i++) s+=Math.floor(Math.random()*10);
+  return s;
+}
 function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function parseFirebaseConfig(text){
   try{
@@ -302,10 +306,26 @@ function isCreator(){
 function hasCreator(){
   return !!(state.tripData && state.tripData.meta && state.tripData.meta.creatorDevice);
 }
-function actionClaimCreator(){
-  if(hasCreator()) return;
-  db.ref(`trips/${state.activeTripId}/meta/creatorDevice`).set(getDeviceId());
+function hasAdminCode(){
+  return !!(state.tripData && state.tripData.meta && state.tripData.meta.adminCode);
 }
+function actionClaimCreator(){
+  // Solo per viaggi "vecchi" creati prima del codice amministratore: reclamo diretto, e imposto un codice per il futuro
+  if(hasAdminCode()) return;
+  const code=genAdminCode();
+  db.ref(`trips/${state.activeTripId}/meta`).update({creatorDevice:getDeviceId(), adminCode:code});
+}
+function actionClaimCreatorWithCode(){
+  const input=document.getElementById('claimCodeInput');
+  if(!input) return;
+  const val=input.value.trim();
+  const real=state.tripData.meta.adminCode;
+  if(!val || val!==real){ state.error="Codice amministratore errato."; render(); return; }
+  db.ref(`trips/${state.activeTripId}/meta/creatorDevice`).set(getDeviceId()).then(()=>{
+    state.error=null; render();
+  });
+}
+
 function avatarHtml(photo,name,size){
   size=size||40;
   if(photo){
@@ -431,8 +451,9 @@ function actionCreateTrip(){
   const name=document.getElementById('newTripName').value.trim();
   if(!name){ state.error="Dai un nome al viaggio."; render(); return; }
   const id=genCode();
+  const adminCode=genAdminCode();
   const pegniObj={}; DEFAULT_PEGNI.forEach(p=>{ pegniObj[db.ref().push().key]=p; });
-  db.ref('trips/'+id+'/meta').set({name, createdAt:Date.now(), creatorDevice:getDeviceId(), pegniPool:pegniObj}).then(()=>{
+  db.ref('trips/'+id+'/meta').set({name, createdAt:Date.now(), creatorDevice:getDeviceId(), adminCode, pegniPool:pegniObj}).then(()=>{
     state.trips.push({id,name}); save('lam_trips', state.trips);
     state.error=null;
     attachTrip(id);
@@ -938,11 +959,23 @@ function renderTabImpostazioni(){
   const myPhoto = players[state.playerId] ? players[state.playerId].photo : null;
   return `
     <h2>Il tuo viaggio</h2>
-    ${!hasCreator() ? `
+    ${!hasAdminCode() ? `
     <div class="card" style="background:var(--amber-bg);border-color:var(--amber)">
-      <p style="margin:0 0 10px"><b>Questo viaggio non ha ancora un amministratore</b> (probabilmente creato prima di questa funzione). Se lo hai creato tu, reclama il ruolo per gestire pegni e lamentele.</p>
+      <p style="margin:0 0 10px"><b>Questo viaggio non ha ancora un codice amministratore</b> (probabilmente creato prima di questa funzione). Se sei tu il creatore, reclama il ruolo: da qui in poi ti verrà assegnato un codice per gestirlo anche da altri dispositivi/browser.</p>
       <button class="btn secondary" onclick="actionClaimCreator()">Diventa amministratore di questo viaggio</button>
-    </div>` : ''}
+    </div>` : (isCreator() ? `
+    <div class="card">
+      <label>Codice amministratore</label>
+      <div class="code-box">${esc(state.tripData.meta.adminCode)}</div>
+      <p class="muted">Conservalo: ti serve per riottenere il ruolo di amministratore se apri l'app da un altro telefono o browser (es. se cambi da Documents a Safari). Non condividerlo con gli altri giocatori.</p>
+    </div>` : `
+    <div class="card">
+      <label>Sei l'amministratore ma da un altro dispositivo?</label>
+      <p class="muted" style="margin-bottom:10px">Inserisci il codice amministratore per gestire il viaggio anche da questo telefono/browser.</p>
+      <input id="claimCodeInput" placeholder="Codice a 4 cifre" style="margin-bottom:10px">
+      ${state.error?`<p style="color:var(--red);margin-bottom:10px">${esc(state.error)}</p>`:''}
+      <button class="btn secondary" onclick="actionClaimCreatorWithCode()">Diventa amministratore</button>
+    </div>`)}
     <div class="card">
       <label>Codice per invitare altri</label>
       <div class="code-box">${state.activeTripId}</div>
