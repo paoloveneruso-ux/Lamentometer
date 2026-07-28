@@ -487,17 +487,19 @@ function actionAddComplaint(){
   ref.transaction(cur=>(cur||0)+1, (err, committed, snap)=>{
     if(!err && committed && snap){
       const newVal=snap.val();
-      if(newVal>1){ autoAssignPegno(state.playerId, state.playerName, newVal, t); }
+      const paidCount=newVal-1; // la prima lamentela è gratis
+      if(paidCount>=1 && paidCount<=PEGNO_LEVELS.length){
+        autoAssignPegno(state.playerId, state.playerName, newVal, paidCount, t);
+      }
     }
   });
 }
 
-function autoAssignPegno(playerId, playerName, complaintNumber, dateStr){
+function autoAssignPegno(playerId, playerName, complaintNumber, paidCount, dateStr){
   const pool=state.tripData.meta.pegniPool || {};
   const keys=Object.keys(pool);
   if(!keys.length) return; // nessun pegno in pool: si salta silenziosamente
-  // difficoltà in base a quante lamentele "a pagamento" ha fatto oggi (la prima è gratis)
-  const paidCount=complaintNumber-1; // 1 = prima a pagamento -> facile, 2 -> medio, 3+ -> difficile
+  // paidCount 1 -> facile, 2 -> medio, 3 -> difficile (una sola estrazione per livello al giorno)
   const tierIndex=Math.min(paidCount-1, PEGNO_LEVELS.length-1);
   let chosenKey=null, chosenLevel=null;
   for(let i=tierIndex;i>=0 && !chosenKey;i--){
@@ -530,6 +532,14 @@ function actionAdminSet(playerId, inputEl){
   let v=parseInt(inputEl.value,10);
   if(isNaN(v) || v<0) v=0;
   db.ref(`trips/${state.activeTripId}/days/${t}/${playerId}`).set(v);
+}
+
+function actionResetAllComplaints(){
+  if(!isCreator()) return;
+  const ok=confirm("Sicuro di voler azzerare tutte le lamentele e tutti i pegni registrati finora, per tutti i giorni e tutti i giocatori? Non si può annullare.");
+  if(!ok) return;
+  db.ref(`trips/${state.activeTripId}/days`).remove();
+  db.ref(`trips/${state.activeTripId}/assigned`).remove();
 }
 
 function actionAddPegno(){
@@ -841,22 +851,28 @@ function renderPegniHistory(){
 }
 
 function renderTabPegni(){
+  const editable=isCreator();
+  if(!editable){
+    return `
+      <h2>Pegni</h2>
+      <p>La prima lamentela del giorno è gratis. Dalla seconda in poi scatta subito un pegno a sorpresa: più ti lamenti nello stesso giorno, più sale la difficoltà. Il pool completo dei possibili pegni è visibile solo all'amministratore, per non rovinare la sorpresa.</p>
+      <div class="card">
+        <h2>Pegni rivelati finora</h2>
+        ${renderPegniHistory()}
+      </div>
+    `;
+  }
   const pool=state.tripData.meta.pegniPool||{};
   const keys=Object.keys(pool);
-  const editable=isCreator();
   const groups=PEGNO_LEVELS.map(level=>{
     const levelKeys=keys.filter(k=>pool[k].level===level);
-    if(!levelKeys.length && !editable) return '';
-    const chips=levelKeys.map(k=>editable
-      ? `<span class="chip">${esc(pool[k].text)} <button onclick="actionRemovePegno('${k}')">✕</button></span>`
-      : `<span class="chip">${esc(pool[k].text)}</span>`
-    ).join('');
+    const chips=levelKeys.map(k=>`<span class="chip">${esc(pool[k].text)} <button onclick="actionRemovePegno('${k}')">✕</button></span>`).join('');
     return `<div style="margin-bottom:14px">
       <div class="rx-label" style="color:${LEVEL_COLOR[level]}">${LEVEL_LABEL[level]}</div>
       <div style="margin-top:6px">${chips || '<p class="muted" style="margin:4px 0 0">Nessuno.</p>'}</div>
     </div>`;
   }).join('');
-  const editSection = editable ? `
+  const editSection = `
       <div class="divider"></div>
       <div class="row">
         <input id="newPegnoInput" placeholder="Nuovo pegno...">
@@ -868,12 +884,10 @@ function renderTabPegni(){
           <option value="difficile">Difficile</option>
         </select>
         <button class="btn small" style="width:auto" onclick="actionAddPegno()">Aggiungi</button>
-      </div>` : `
-      <div class="divider"></div>
-      <p class="muted">Solo chi ha creato il viaggio può aggiungere o rimuovere pegni.</p>`;
+      </div>`;
   return `
     <h2>Pool dei pegni</h2>
-    <p>La prima lamentela del giorno è gratis. Dalla seconda in poi scatta subito un pegno: più ti lamenti nello stesso giorno, più sale la difficoltà.</p>
+    <p class="muted">Visibile solo a te come amministratore: gli altri giocatori vedono solo i pegni via via rivelati, non l'intera lista.</p>
     <div class="card">
       ${keys.length?groups:'<p class="muted">Nessun pegno in lista ancora.</p>'}
       ${editSection}
@@ -910,6 +924,11 @@ function renderTabAdmin(){
       <input type="date" value="${t}" onchange="state.adminDate=this.value; render()">
     </div>
     ${rows || '<div class="empty">Nessun giocatore ancora.</div>'}
+    <div class="card" style="background:var(--red-bg);border-color:var(--red);margin-top:18px">
+      <h2 style="color:var(--red)">Azzera tutto</h2>
+      <p>Cancella tutte le lamentele e tutti i pegni registrati finora, per ogni giorno e ogni giocatore — utile se avete fatto una prova prima di partire e ora volete iniziare la partita vera da zero. I giocatori restano, i pegni nel pool restano. Non si può annullare.</p>
+      <button class="btn danger" onclick="actionResetAllComplaints()">Azzera lamentele e pegni</button>
+    </div>
   `;
 }
 
