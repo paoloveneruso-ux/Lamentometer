@@ -430,6 +430,12 @@ function attachTrip(tripId){
       state.screen='player-select';
     }
     render();
+  }, err=>{
+    state.screen='db-error';
+    state.error = (err && err.code === 'PERMISSION_DENIED')
+      ? "Il database ha rifiutato l'accesso (permesso negato). Se il Realtime Database è stato creato in \"modalità di test\", le regole scadono dopo 30 giorni. Vai su console.firebase.google.com → il tuo progetto → Realtime Database → Regole, e imposta lettura/scrittura sempre consentite."
+      : "Errore di connessione al database: "+(err && err.message ? err.message : err)+". Controlla la connessione internet e riprova.";
+    render();
   });
 }
 
@@ -589,10 +595,22 @@ function render(){
   if(state.screen==='trip-select'){ app.innerHTML=renderTripSelect(); return; }
   if(state.screen==='player-select'){ app.innerHTML=renderPlayerSelect(); return; }
   if(state.screen==='main'){ app.innerHTML=renderMain(); return; }
+  if(state.screen==='db-error'){ app.innerHTML=renderDbError(); return; }
 }
 
 function renderLoading(){
   return `<div class="screen"><p class="mono">Caricamento…</p></div>`;
+}
+
+function renderDbError(){
+  return `
+  <div class="topbar"><div class="brand">Lamentometro</div><div class="trip-name">Problema di connessione</div></div>
+  <div class="screen">
+    <div class="card" style="background:var(--red-bg);border-color:var(--red)">
+      <p style="margin:0 0 14px">${esc(state.error||'Errore sconosciuto.')}</p>
+      <button class="btn danger" onclick="location.reload()">Riprova</button>
+    </div>
+  </div>`;
 }
 
 function renderSetupFirebase(){
