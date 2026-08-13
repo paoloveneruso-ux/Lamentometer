@@ -463,6 +463,11 @@ function actionCreateTrip(){
     state.trips.push({id,name}); save('lam_trips', state.trips);
     state.error=null;
     attachTrip(id);
+  }).catch(err=>{
+    state.error = (err && err.code==='PERMISSION_DENIED')
+      ? "Il database ha rifiutato la scrittura (permesso negato). Controlla le regole del Realtime Database su Firebase Console."
+      : "Errore durante la creazione del viaggio: "+(err && err.message ? err.message : err);
+    render();
   });
 }
 
@@ -476,6 +481,11 @@ function actionJoinTrip(){
     if(!state.trips.some(t=>t.id===code)){ state.trips.push({id:code,name}); save('lam_trips', state.trips); }
     state.error=null;
     attachTrip(code);
+  }).catch(err=>{
+    state.error = (err && err.code==='PERMISSION_DENIED')
+      ? "Il database ha rifiutato la lettura (permesso negato). Controlla le regole del Realtime Database su Firebase Console."
+      : "Errore durante la ricerca del viaggio: "+(err && err.message ? err.message : err);
+    render();
   });
 }
 
